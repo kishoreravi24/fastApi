@@ -1,21 +1,31 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from sqlalchemy.orm import Session 
+from . import models,database
 
 app = FastAPI()
 
-class Item(BaseModel):
-    name: str
-    price: float
+# craete DB tables
+models.base.metadata.create_all(bind=database.engine)
+
+def get_db():
+    db = database.sessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.get("/")
-def read_root():
-    return {"Hello":"world"}
+def get_root():
+    return {"message": "FastAPI with postgreSQL"}
 
+@app.post("/users/")
+def create_user(name: str, email: str, db: Session = Depends(get_db)):
+    user = models.User(name = name, email = email)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
-@app.get("/itmes/{item_id}")
-def read_item(item_id: int):
-    return {"item_id":item_id}
-
-@app.put("/items/{item_id}")
-def update_item(item_id:int,item:Item):
-    return {"item_name":item.name,"item_id":item_id}
+@app.get("/users/", response_model=List[schemas.UserOut])
+def read_users(db: Session = Depends(get_db)):
+    return db.query(models.User).all()
